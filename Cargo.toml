@@ -1,0 +1,11 @@
+[package]
+name = "piecewise"
+version = "0.1.0"
+authors = ["Scott Moeller <electronjoe@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+intervals-general = "0.1.0"
+
+[patch.crates-io]
+intervals-general = {path = "../intervals-general" }
