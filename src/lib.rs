@@ -120,8 +120,26 @@ impl<T, U> SmallPiecewise<T, U>
 where
     T: std::cmp::PartialOrd,
     T: std::marker::Copy,
-    T: std::ops::Sub,
 {
+    /// Private creation exclusively for crate operations
+    ///
+    /// For public construction use SmallPiecewiseBuilder
+    fn new() -> SmallPiecewise<T, U> {
+        SmallPiecewise {
+            values_over_intervals: smallvec::SmallVec::new(),
+        }
+    }
+
+    /// Private add for crate use in known well defined SmallPiecewise segments
+    ///
+    /// Must add segments in sorted order by right bound (nominal storage order),
+    /// and segmenets must not overlap. These guarantees are made by the crate
+    /// in all use of this private function.
+    fn add(&mut self, element: ValueOverInterval<T, U>) -> &mut Self {
+        self.values_over_intervals.push(element);
+        self
+    }
+
     /// Retrieves the value of the piecewise function at a specific point
     ///
     /// If the Domain does not contain the value specified by at: - Optional
@@ -188,7 +206,6 @@ impl<T, U> SmallPiecewiseBuilder<T, U>
 where
     T: std::cmp::PartialOrd,
     T: std::marker::Copy,
-    T: std::ops::Sub,
     U: std::marker::Copy,
 {
     pub fn new() -> SmallPiecewiseBuilder<T, U> {
