@@ -9,6 +9,3 @@ either = "1.5.2"
 intervals-general = "0.1.0"
 itertools = "0.8.0"
 smallvec = "0.6.9"
-
-[patch.crates-io]
-intervals-general = {path = "../intervals-general" }
