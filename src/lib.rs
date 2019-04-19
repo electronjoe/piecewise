@@ -218,11 +218,11 @@ where
 }
 
 /// Multiply two SmallPiecewise point-wise across Domain
-/// 
+///
 /// For every point defined in both Piecewise functions, multiply the values
 /// and form an output interval accordingly.  For regions of the domain having
 /// only one of two SmallPiecewise defined, the output is undefined.
-/// 
+///
 /// # Examples
 ///
 /// ```
@@ -240,14 +240,14 @@ where
 ///     1.0,
 /// ));
 /// let piecewise_1 = builder.build();
-/// 
+///
 /// builder = SmallPiecewiseBuilder::new();
 /// builder.add(ValueOverInterval::new(
 ///     Interval::UnboundedClosedLeft { left: 180 },
 ///     -10.0,
 /// ));
 /// let piecewise_2 = builder.build();
-/// 
+///
 /// let result = piecewise_1 * piecewise_2;
 ///
 /// assert_eq!(result.value_at(1), None);
@@ -419,10 +419,15 @@ where
         for (self_voi, complement_interval) in
             iproduct!(&self.values_over_intervals, element.interval().complement())
         {
-            new_voi.push(ValueOverInterval {
-                interval: self_voi.interval().intersect(&complement_interval),
-                value: *self_voi.value(),
-            });
+            let intersection = self_voi.interval().intersect(&complement_interval);
+            if let Interval::<T>::Empty = intersection {
+                // Empty interval ValueOverInterval are not meaningful, discard
+            } else {
+                new_voi.push(ValueOverInterval {
+                    interval: intersection,
+                    value: *self_voi.value(),
+                });
+            }
         }
         self.values_over_intervals = new_voi;
         self.values_over_intervals.push(element);
