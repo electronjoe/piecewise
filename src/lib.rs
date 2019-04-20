@@ -420,7 +420,7 @@ where
             iproduct!(&self.values_over_intervals, element.interval().complement())
         {
             let intersection = self_voi.interval().intersect(&complement_interval);
-            if let Interval::<T>::Empty = intersection {
+            if let Interval::Empty = intersection {
                 // Empty interval ValueOverInterval are not meaningful, discard
             } else {
                 new_voi.push(ValueOverInterval {
