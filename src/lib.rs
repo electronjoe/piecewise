@@ -140,9 +140,9 @@ where
 
     /// Private add for crate use in known well defined SmallPiecewise segments
     ///
-    /// Must add segments in sorted order by right bound (nominal storage order),
-    /// and segmenets must not overlap. These guarantees are made by the crate
-    /// in all use of this private function.
+    /// Must add segments in sorted order by right bound (nominal storage
+    /// order), and segmenets must not overlap. These guarantees are made by
+    /// the crate in all use of this private function.
     fn add(&mut self, element: ValueOverInterval<T, U>) -> &mut Self {
         self.values_over_intervals.push(element);
         self
@@ -164,16 +164,17 @@ where
     /// use piecewise::SmallPiecewiseBuilder;
     /// use piecewise::ValueOverInterval;
     ///
-    /// let mut builder: SmallPiecewiseBuilder<u32, f32> = SmallPiecewiseBuilder::new();
-    /// builder.add(ValueOverInterval::new(
-    ///     Interval::UnboundedClosedLeft { left: 230 },
-    ///     2.0,
-    /// ));
-    /// builder.add(ValueOverInterval::new(
-    ///     Interval::UnboundedOpenRight { right: 200 },
-    ///     1.0,
-    /// ));
-    /// let small_piecewise = builder.build();
+    /// let builder: SmallPiecewiseBuilder<u32, f32> = SmallPiecewiseBuilder::new();
+    /// let small_piecewise = builder
+    ///     .add_overlay(ValueOverInterval::new(
+    ///         Interval::UnboundedClosedLeft { left: 230 },
+    ///         2.0,
+    ///     ))
+    ///     .add_overlay(ValueOverInterval::new(
+    ///         Interval::UnboundedOpenRight { right: 200 },
+    ///         1.0,
+    ///     ))
+    ///     .build();
     ///
     /// assert_eq!(small_piecewise.value_at(1), Some(&1.0));
     /// assert_eq!(small_piecewise.value_at(200), None);
@@ -230,23 +231,25 @@ where
 /// use piecewise::SmallPiecewiseBuilder;
 /// use piecewise::ValueOverInterval;
 ///
-/// let mut builder: SmallPiecewiseBuilder<u32, f32> = SmallPiecewiseBuilder::new();
-/// builder.add(ValueOverInterval::new(
-///     Interval::UnboundedClosedLeft { left: 230 },
-///     2.0,
-/// ));
-/// builder.add(ValueOverInterval::new(
-///     Interval::UnboundedOpenRight { right: 200 },
-///     1.0,
-/// ));
-/// let piecewise_1 = builder.build();
+/// let builder: SmallPiecewiseBuilder<u32, f32> = SmallPiecewiseBuilder::new();
+/// let piecewise_1 = builder
+///     .add_overlay(ValueOverInterval::new(
+///         Interval::UnboundedClosedLeft { left: 230 },
+///         2.0,
+///     ))
+///     .add_overlay(ValueOverInterval::new(
+///         Interval::UnboundedOpenRight { right: 200 },
+///         1.0,
+///     ))
+///     .build();
 ///
-/// builder = SmallPiecewiseBuilder::new();
-/// builder.add(ValueOverInterval::new(
-///     Interval::UnboundedClosedLeft { left: 180 },
-///     -10.0,
-/// ));
-/// let piecewise_2 = builder.build();
+/// let builder = SmallPiecewiseBuilder::new();
+/// let piecewise_2 = builder
+///     .add_overlay(ValueOverInterval::new(
+///         Interval::UnboundedClosedLeft { left: 180 },
+///         -10.0,
+///     ))
+///     .build();
 ///
 /// let result = piecewise_1 * piecewise_2;
 ///
@@ -328,7 +331,8 @@ where
                         } else {
                             None
                         };
-                        // Take new_right_induced if Some and not Interval::Empty, else new_left_induced
+                        // Take new_right_induced if Some and not Interval::Empty, else
+                        // new_left_induced
                         let first = match new_right_induced {
                             None
                             | Some(ValueOverInterval {
@@ -395,17 +399,18 @@ where
     /// use piecewise::SmallPiecewiseBuilder;
     /// use piecewise::ValueOverInterval;
     ///
-    /// let mut builder: SmallPiecewiseBuilder<u32, f32> = SmallPiecewiseBuilder::new();
-    /// builder.add(ValueOverInterval::new(Interval::Unbounded, 5.0));
-    /// builder.add(ValueOverInterval::new(
-    ///     Interval::UnboundedClosedLeft { left: 230 },
-    ///     2.0,
-    /// ));
-    /// builder.add(ValueOverInterval::new(
-    ///     Interval::UnboundedOpenRight { right: 200 },
-    ///     1.0,
-    /// ));
-    /// let small_piecewise = builder.build();
+    /// let builder: SmallPiecewiseBuilder<u32, f32> = SmallPiecewiseBuilder::new();
+    /// let small_piecewise = builder
+    ///     .add_overlay(ValueOverInterval::new(Interval::Unbounded, 5.0))
+    ///     .add_overlay(ValueOverInterval::new(
+    ///         Interval::UnboundedClosedLeft { left: 230 },
+    ///         2.0,
+    ///     ))
+    ///     .add_overlay(ValueOverInterval::new(
+    ///         Interval::UnboundedOpenRight { right: 200 },
+    ///         1.0,
+    ///     ))
+    ///     .build();
     ///
     /// println!("{}", small_piecewise);
     ///
@@ -414,7 +419,7 @@ where
     /// assert_eq!(small_piecewise.value_at(230), Some(&2.0));
     /// assert_eq!(small_piecewise.value_at(231), Some(&2.0));
     /// ```
-    pub fn add(&mut self, element: ValueOverInterval<T, U>) -> &mut Self {
+    pub fn add_overlay(mut self, element: ValueOverInterval<T, U>) -> Self {
         let mut new_voi: smallvec::SmallVec<[ValueOverInterval<T, U>; 8]> = smallvec![];
         for (self_voi, complement_interval) in
             iproduct!(&self.values_over_intervals, element.interval().complement())
@@ -463,18 +468,19 @@ mod tests {
     }
 
     #[test]
-    fn builder_add() {
-        let mut builder: SmallPiecewiseBuilder<u32, f32> = SmallPiecewiseBuilder::new();
-        builder.add(ValueOverInterval::new(Interval::Unbounded, 5.0));
-        builder.add(ValueOverInterval::new(
-            Interval::UnboundedClosedLeft { left: 230 },
-            2.0,
-        ));
-        builder.add(ValueOverInterval::new(
-            Interval::UnboundedOpenRight { right: 200 },
-            1.0,
-        ));
-        let small_piecewise = builder.build();
+    fn builder_add_overlay() {
+        let builder: SmallPiecewiseBuilder<u32, f32> = SmallPiecewiseBuilder::new();
+        let small_piecewise = builder
+            .add_overlay(ValueOverInterval::new(Interval::Unbounded, 5.0))
+            .add_overlay(ValueOverInterval::new(
+                Interval::UnboundedClosedLeft { left: 230 },
+                2.0,
+            ))
+            .add_overlay(ValueOverInterval::new(
+                Interval::UnboundedOpenRight { right: 200 },
+                1.0,
+            ))
+            .build();
 
         println!("{}", small_piecewise);
 
