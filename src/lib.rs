@@ -5,6 +5,8 @@ use itertools::Itertools;
 use smallvec::smallvec;
 use std::iter::once;
 
+const DEFAULT_CAPACITY: usize = 8;
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ValueOverInterval<T, U> {
     pub(crate) interval: Interval<T>,
@@ -119,9 +121,9 @@ where
 ///
 /// These guarantees are ensured by the StepFunctionBuilder at build() time, and
 /// by operations over piecewise functions.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SmallPiecewise<T, U> {
-    values_over_intervals: smallvec::SmallVec<[ValueOverInterval<T, U>; 8]>,
+    values_over_intervals: smallvec::SmallVec<[ValueOverInterval<T, U>; DEFAULT_CAPACITY]>,
 }
 
 impl<T, U> SmallPiecewise<T, U>
@@ -144,6 +146,10 @@ where
     /// order), and segmenets must not overlap. These guarantees are made by
     /// the crate in all use of this private function.
     fn add(&mut self, element: ValueOverInterval<T, U>) -> &mut Self {
+        debug_assert!(
+            !matches!(element.interval, Interval::Empty),
+            "Adding empty interval to SmallPiecewise"
+        );
         self.values_over_intervals.push(element);
         self
     }
@@ -184,7 +190,7 @@ where
         self.values_over_intervals
             .iter()
             .find(|voi| voi.interval().contains(&Interval::Singleton { at }))
-            .and_then(|voi| Some(voi.value()))
+            .map(|voi| voi.value())
     }
 }
 
@@ -195,7 +201,7 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut output = String::new();
-        for i in self.values_over_intervals.iter() {
+        for i in &self.values_over_intervals {
             output.push_str(&format!("{}{: >7?}\n", i.interval(), i.value()));
         }
         write!(f, "{}", output)
@@ -208,13 +214,9 @@ where
     T: std::marker::Copy,
 {
     fn from_iter<I: IntoIterator<Item = ValueOverInterval<T, U>>>(iter: I) -> Self {
-        let mut c = SmallPiecewise::new();
-
-        for i in iter {
-            c.add(i);
+        Self {
+            values_over_intervals: iter.into_iter().collect(),
         }
-
-        c
     }
 }
 
@@ -280,75 +282,67 @@ where
                 if let Some(cmp) = a.interval.right_partial_cmp(&b.interval) {
                     cmp
                 } else {
-                    // TODO(smoeller) fix this... how? This occures due to e.g. Empty interval
                     std::cmp::Ordering::Less
                 }
             })
-            .flat_map(|either| {
-                // TODO(smoeller) since using once / chain - no longer need inner Options?
-                // Alternative is to implement a None, One or Two enum that is iterable
-                match either {
-                    Left(new_left) => {
-                        let retval = if let (.., Some(ref right)) = prior_intervals {
-                            once(Some(ValueOverInterval::new(
-                                new_left.interval.intersect(&right.interval),
-                                new_left.value * right.value,
-                            )))
-                            .chain(once(None))
-                        } else {
-                            once(None).chain(once(None))
-                        };
-                        prior_intervals = (Some(*new_left), prior_intervals.1);
-                        retval
-                    }
-                    Right(new_right) => {
-                        let retval = if let (Some(ref left), ..) = prior_intervals {
-                            once(Some(ValueOverInterval::new(
-                                left.interval.intersect(&new_right.interval),
-                                left.value * new_right.value,
-                            )))
-                            .chain(once(None))
-                        } else {
-                            once(None).chain(once(None))
-                        };
-                        prior_intervals = (prior_intervals.0, Some(*new_right));
-                        retval
-                    }
-                    Both(new_left, new_right) => {
-                        let new_right_induced = if let (Some(ref left), ..) = prior_intervals {
-                            Some(ValueOverInterval::new(
-                                left.interval.intersect(&new_right.interval),
-                                left.value * new_right.value,
-                            ))
-                        } else {
-                            None
-                        };
-                        let new_left_induced = if let (.., Some(ref right)) = prior_intervals {
-                            Some(ValueOverInterval::new(
-                                new_left.interval.intersect(&right.interval),
-                                new_left.value * right.value,
-                            ))
-                        } else {
-                            None
-                        };
-                        // Take new_right_induced if Some and not Interval::Empty, else
-                        // new_left_induced
-                        let first = match new_right_induced {
-                            None
-                            | Some(ValueOverInterval {
-                                interval: Interval::Empty,
-                                ..
-                            }) => once(new_left_induced),
-                            _ => once(new_right_induced),
-                        };
-                        // Tag on any interval generated by the combined new intervals
-                        let retval = first.chain(once(Some(ValueOverInterval::new(
-                            new_left.interval.intersect(&new_right.interval),
-                            new_left.value * new_right.value,
-                        ))));
-                        prior_intervals = (Some(*new_left), Some(*new_right));
-                        retval
-                    }
+            .flat_map(|either| match either {
+                Left(new_left) => {
+                    let retval = if let (.., Some(ref right)) = &prior_intervals {
+                        once(Some(ValueOverInterval::new(
+                            new_left.interval.intersect(&right.interval),
+                            new_left.value * right.value,
+                        )))
+                        .chain(once(None))
+                    } else {
+                        once(None).chain(once(None))
+                    };
+                    prior_intervals.0 = Some(*new_left);
+                    retval
+                }
+                Right(new_right) => {
+                    let retval = if let (Some(ref left), ..) = &prior_intervals {
+                        once(Some(ValueOverInterval::new(
+                            left.interval.intersect(&new_right.interval),
+                            left.value * new_right.value,
+                        )))
+                        .chain(once(None))
+                    } else {
+                        once(None).chain(once(None))
+                    };
+                    prior_intervals.1 = Some(*new_right);
+                    retval
+                }
+                Both(new_left, new_right) => {
+                    let new_right_induced = if let (Some(ref left), ..) = &prior_intervals {
+                        Some(ValueOverInterval::new(
+                            left.interval.intersect(&new_right.interval),
+                            left.value * new_right.value,
+                        ))
+                    } else {
+                        None
+                    };
+                    let new_left_induced = if let (.., Some(ref right)) = &prior_intervals {
+                        Some(ValueOverInterval::new(
+                            new_left.interval.intersect(&right.interval),
+                            new_left.value * right.value,
+                        ))
+                    } else {
+                        None
+                    };
+                    let first = match new_right_induced {
+                        None
+                        | Some(ValueOverInterval {
+                            interval: Interval::Empty,
+                            ..
+                        }) => once(new_left_induced),
+                        _ => once(new_right_induced),
+                    };
+                    let retval = first.chain(once(Some(ValueOverInterval::new(
+                        new_left.interval.intersect(&new_right.interval),
+                        new_left.value * new_right.value,
+                    ))));
+                    prior_intervals = (Some(*new_left), Some(*new_right));
+                    retval
                 }
             })
             .filter_map(|x| x)
@@ -362,7 +356,7 @@ where
     T: Copy,
     T: PartialOrd,
 {
-    values_over_intervals: smallvec::SmallVec<[ValueOverInterval<T, U>; 8]>,
+    values_over_intervals: smallvec::SmallVec<[ValueOverInterval<T, U>; DEFAULT_CAPACITY]>,
 }
 
 impl<T, U> SmallPiecewiseBuilder<T, U>
@@ -420,7 +414,8 @@ where
     /// assert_eq!(small_piecewise.value_at(231), Some(&2.0));
     /// ```
     pub fn add_overlay(mut self, element: ValueOverInterval<T, U>) -> Self {
-        let mut new_voi: smallvec::SmallVec<[ValueOverInterval<T, U>; 8]> = smallvec![];
+        let mut new_voi: smallvec::SmallVec<[ValueOverInterval<T, U>; DEFAULT_CAPACITY]> =
+            smallvec![];
         for (self_voi, complement_interval) in
             iproduct!(&self.values_over_intervals, element.interval().complement())
         {
@@ -442,8 +437,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::SmallPiecewiseBuilder;
-    use crate::ValueOverInterval;
+    use crate::{SmallPiecewise, SmallPiecewiseBuilder, ValueOverInterval};
     use intervals_general::bound_pair::BoundPair;
     use intervals_general::interval::Interval;
 
@@ -488,5 +482,53 @@ mod tests {
         assert_eq!(small_piecewise.value_at(210), Some(&5.0));
         assert_eq!(small_piecewise.value_at(230), Some(&2.0));
         assert_eq!(small_piecewise.value_at(231), Some(&2.0));
+    }
+
+    #[test]
+    fn test_small_piecewise_construction() {
+        let intervals = vec![
+            ValueOverInterval::new(Interval::UnboundedOpenRight { right: 0 }, 1.0f32),
+            ValueOverInterval::new(Interval::UnboundedClosedLeft { left: 0 }, 2.0f32),
+        ];
+
+        let piecewise: SmallPiecewise<i32, f32> = intervals.into_iter().collect();
+
+        assert_eq!(piecewise.value_at(-1), Some(&1.0));
+        assert_eq!(piecewise.value_at(0), Some(&2.0));
+        assert_eq!(piecewise.value_at(1), Some(&2.0));
+    }
+
+    #[test]
+    fn test_small_piecewise_multiplication_edge_cases() {
+        let builder1 = SmallPiecewiseBuilder::new();
+        let piecewise1 = builder1
+            .add_overlay(ValueOverInterval::new(
+                Interval::UnboundedOpenRight { right: 0 },
+                2.0f32,
+            ))
+            .build();
+
+        let builder2 = SmallPiecewiseBuilder::new();
+        let piecewise2 = builder2
+            .add_overlay(ValueOverInterval::new(
+                Interval::UnboundedClosedLeft { left: 0 },
+                3.0f32,
+            ))
+            .build();
+
+        let result = piecewise1 * piecewise2;
+
+        assert_eq!(result.value_at(0), None);
+        assert_eq!(result.value_at(-1), None);
+        assert_eq!(result.value_at(1), None);
+    }
+
+    #[test]
+    fn test_small_piecewise_empty_multiplication() {
+        let empty1: SmallPiecewise<i32, f32> = SmallPiecewise::default();
+        let empty2: SmallPiecewise<i32, f32> = SmallPiecewise::default();
+
+        let result = empty1 * empty2;
+        assert_eq!(result.value_at(0), None);
     }
 }
